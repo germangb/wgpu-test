@@ -13,8 +13,8 @@ use wgpu::{
     VertexBufferDescriptor, VertexStateDescriptor,
 };
 
-const WIDTH: usize = 640 / 2;
-const HEIGHT: usize = 480 / 2;
+const WIDTH: usize = 640;
+const HEIGHT: usize = 480;
 
 fn main() {
     env_logger::builder()
@@ -61,7 +61,7 @@ fn main() {
         &surface,
         &SwapChainDescriptor {
             usage: TextureUsage::OUTPUT_ATTACHMENT,
-            format: TextureFormat::Bgra8Unorm,
+            format: TextureFormat::Bgra8UnormSrgb,
             width: WIDTH as _,
             height: HEIGHT as _,
             present_mode: PresentMode::Fifo,
@@ -123,7 +123,7 @@ fn main() {
         }),
         primitive_topology: PrimitiveTopology::TriangleList,
         color_states: &[ColorStateDescriptor {
-            format: TextureFormat::Bgra8Unorm,
+            format: TextureFormat::Bgra8UnormSrgb,
             alpha_blend: BlendDescriptor::default(),
             color_blend: BlendDescriptor::default(),
             write_mask: ColorWrite::default(),
@@ -142,6 +142,19 @@ fn main() {
         alpha_to_coverage_enabled: false,
     });
 
+    // init imgui
+    let mut imgui = imgui::Context::create();
+    let mut imgui_sdl2 = imgui_sdl2::ImguiSdl2::new(&mut imgui, &window);
+    let mut imgui_wgpu = imgui_wgpu::Renderer::new(
+        &mut imgui,
+        &device,
+        &queue,
+        imgui_wgpu::RendererConfig {
+            texture_format: TextureFormat::Bgra8UnormSrgb,
+            ..Default::default()
+        },
+    );
+
     'main: loop {
         for event in events.poll_iter() {
             match event {
@@ -149,6 +162,9 @@ fn main() {
                     win_event: WindowEvent::Close,
                     ..
                 } => break 'main,
+                _ if !imgui_sdl2.ignore_event(&event) => {
+                    imgui_sdl2.handle_event(&mut imgui, &event);
+                }
                 _ => {}
             }
         }
@@ -157,6 +173,8 @@ fn main() {
             .get_current_frame()
             .expect("Error getting current frame");
 
+        // draw wgpu
+
         let mut cmd = device.create_command_encoder(&CommandEncoderDescriptor::default());
         {
             let mut pass = cmd.begin_render_pass(&RenderPassDescriptor {
@@ -164,7 +182,12 @@ fn main() {
                     attachment: &frame.output.view,
                     resolve_target: None,
                     ops: Operations {
-                        load: LoadOp::Clear(Color::GREEN),
+                        load: LoadOp::Clear(Color {
+                            r: 0.5,
+                            g: 0.5,
+                            b: 0.5,
+                            a: 1.0,
+                        }),
                         store: true,
                     },
                 }],
@@ -175,8 +198,35 @@ fn main() {
             pass.set_index_buffer(index.slice(..));
             pass.draw(0..3, 0..1);
         }
+
+        {
+            let mut pass = cmd.begin_render_pass(&RenderPassDescriptor {
+                color_attachments: &[RenderPassColorAttachmentDescriptor {
+                    attachment: &frame.output.view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Load,
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+
+            // draw imgui
+            imgui_sdl2.prepare_frame(imgui.io_mut(), &window, &events.mouse_state());
+            let ui = imgui.frame();
+
+            ui.show_demo_window(&mut true);
+            ui.show_metrics_window(&mut true);
+
+            imgui_sdl2.prepare_render(&ui, &window);
+            imgui_wgpu
+                .render(ui.render(), &queue, &device, &mut pass)
+                .expect("Error rendering imgui");
+        }
+
         queue.submit(Some(cmd.finish()));
 
-        std::thread::sleep(std::time::Duration::new(0, 1_000_000_000 / 60));
+        //std::thread::sleep(std::time::Duration::new(0, 1_000_000_000 / 60));
     }
 }
