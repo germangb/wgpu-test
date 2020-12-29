@@ -1,0 +1,15 @@
+[package]
+name = "wgpu-test"
+version = "0.1.0"
+authors = ["german gomez <germangb42@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wgpu = "0.6.2"
+sdl2 = { version = "0.34.3", features = ["raw-window-handle"] }
+futures = "0.3.8"
+log = "0.4.11"
+env_logger = "0.8.2"
+bytemuck = { version = "1.4.1", features = ["derive"] }
